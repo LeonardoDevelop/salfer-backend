@@ -1,0 +1,401 @@
+// ============================================================
+// SALFER — Esquema de base de datos (Prisma + PostgreSQL)
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ------------------------------------------------------------
+// ENUMS
+// ------------------------------------------------------------
+
+enum Role {
+  CLIENTE
+  ADMIN
+  VENDEDOR // preparado para marketplace futuro
+}
+
+enum EstadoProducto {
+  ACTIVO
+  INACTIVO
+  BORRADOR
+}
+
+enum EstadoPedido {
+  PENDIENTE
+  PAGADO
+  PREPARANDO
+  ENVIADO
+  ENTREGADO
+  CANCELADO
+  REEMBOLSADO
+}
+
+enum MetodoPago {
+  TARJETA
+  TRANSFERENCIA
+  QR
+  BILLETERA_DIGITAL
+}
+
+enum EstadoPago {
+  PENDIENTE
+  CONFIRMADO
+  FALLIDO
+  REEMBOLSADO
+}
+
+enum TipoEntrega {
+  ENVIO
+  RECOJO_TIENDA
+}
+
+enum TipoPromocion {
+  PORCENTAJE
+  MONTO_FIJO
+  ENVIO_GRATIS
+}
+
+// ------------------------------------------------------------
+// USUARIOS Y SEGURIDAD
+// ------------------------------------------------------------
+
+model Usuario {
+  id            String    @id @default(cuid())
+  nombre        String
+  email         String    @unique
+  passwordHash  String
+  telefono      String?
+  rol           Role      @default(CLIENTE)
+  activo        Boolean   @default(true)
+  emailVerificado Boolean @default(false)
+  twoFactorHabilitado Boolean @default(false)
+  avatarUrl     String?
+  creadoEn      DateTime  @default(now())
+  actualizadoEn DateTime  @updatedAt
+
+  direcciones   Direccion[]
+  pedidos       Pedido[]
+  carrito       Carrito?
+  favoritos     Favorito[]
+  resenas       Resena[]
+  cupones       CuponUsuario[]
+  sesiones      Sesion[]
+  logsSeguridad LogSeguridad[]
+  productos     Producto[] @relation("VendedorProducto") // futuro marketplace
+
+  @@index([email])
+}
+
+model Sesion {
+  id           String   @id @default(cuid())
+  usuarioId    String
+  usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tokenHash    String
+  userAgent    String?
+  ip           String?
+  creadaEn     DateTime @default(now())
+  expiraEn     DateTime
+  revocada     Boolean  @default(false)
+
+  @@index([usuarioId])
+}
+
+model LogSeguridad {
+  id          String   @id @default(cuid())
+  usuarioId   String?
+  usuario     Usuario? @relation(fields: [usuarioId], references: [id], onDelete: SetNull)
+  accion      String   // "LOGIN_OK", "LOGIN_FAIL", "PASSWORD_CHANGE", "PRODUCT_DELETE", etc.
+  detalle     String?
+  ip          String?
+  creadoEn    DateTime @default(now())
+
+  @@index([usuarioId])
+  @@index([accion])
+}
+
+model Direccion {
+  id            String   @id @default(cuid())
+  usuarioId     String
+  usuario       Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  etiqueta      String?  // "Casa", "Trabajo"
+  destinatario  String
+  telefono      String
+  calle         String
+  numero        String?
+  distrito      String
+  ciudad        String
+  region        String
+  codigoPostal  String?
+  referencia    String?
+  predeterminada Boolean @default(false)
+
+  pedidos       Pedido[]
+
+  @@index([usuarioId])
+}
+
+// ------------------------------------------------------------
+// CATÁLOGO
+// ------------------------------------------------------------
+
+model Categoria {
+  id          String   @id @default(cuid())
+  nombre      String   @unique
+  slug        String   @unique
+  icono       String?
+  imagenUrl   String?
+  descripcion String?
+  activa      Boolean  @default(true)
+  orden       Int      @default(0)
+
+  productos   Producto[]
+}
+
+model Marca {
+  id        String     @id @default(cuid())
+  nombre    String     @unique
+  logoUrl   String?
+  productos Producto[]
+}
+
+model Producto {
+  id                String          @id @default(cuid())
+  sku               String          @unique
+  nombre            String
+  slug              String          @unique
+  descripcion       String
+  categoriaId       String
+  categoria         Categoria       @relation(fields: [categoriaId], references: [id])
+  marcaId           String?
+  marca             Marca?          @relation(fields: [marcaId], references: [id])
+  vendedorId        String?
+  vendedor          Usuario?        @relation("VendedorProducto", fields: [vendedorId], references: [id])
+
+  precio            Decimal         @db.Decimal(10, 2)
+  precioAnterior    Decimal?        @db.Decimal(10, 2)
+  moneda            String          @default("PEN")
+
+  stock             Int             @default(0)
+  stockMinimo       Int             @default(5)
+  stockReservado     Int            @default(0)
+
+  destacado         Boolean         @default(false)
+  etiqueta          String?         // NUEVO / OFERTA / DESTACADO
+  estado            EstadoProducto  @default(BORRADOR)
+  ratingPromedio    Decimal         @default(0) @db.Decimal(2, 1)
+  totalResenas      Int             @default(0)
+  totalVentas        Int            @default(0)
+
+  creadoEn          DateTime        @default(now())
+  actualizadoEn     DateTime        @updatedAt
+
+  imagenes          ImagenProducto[]
+  caracteristicas   CaracteristicaProducto[]
+  itemsPedido       ItemPedido[]
+  itemsCarrito      ItemCarrito[]
+  favoritos         Favorito[]
+  resenas           Resena[]
+  movimientosStock  MovimientoInventario[]
+
+  @@index([categoriaId])
+  @@index([estado])
+  @@index([destacado])
+}
+
+model ImagenProducto {
+  id          String   @id @default(cuid())
+  productoId  String
+  producto    Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  url         String
+  esPrincipal Boolean  @default(false)
+  orden       Int      @default(0)
+
+  @@index([productoId])
+}
+
+model CaracteristicaProducto {
+  id          String   @id @default(cuid())
+  productoId  String
+  producto    Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  clave       String   // "Pantalla", "Procesador", "RAM"...
+  valor       String
+
+  @@index([productoId])
+}
+
+model Resena {
+  id          String   @id @default(cuid())
+  productoId  String
+  producto    Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  usuarioId   String
+  usuario     Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  calificacion Int     // 1-5
+  comentario  String?
+  creadoEn    DateTime @default(now())
+
+  @@index([productoId])
+  @@unique([productoId, usuarioId]) // un usuario reseña un producto una vez
+}
+
+model Favorito {
+  id          String   @id @default(cuid())
+  usuarioId   String
+  usuario     Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  productoId  String
+  producto    Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  creadoEn    DateTime @default(now())
+
+  @@unique([usuarioId, productoId])
+}
+
+// ------------------------------------------------------------
+// INVENTARIO
+// ------------------------------------------------------------
+
+model MovimientoInventario {
+  id          String   @id @default(cuid())
+  productoId  String
+  producto    Producto @relation(fields: [productoId], references: [id], onDelete: Cascade)
+  tipo        String   // "ENTRADA", "SALIDA", "AJUSTE", "RESERVA", "LIBERACION"
+  cantidad    Int
+  motivo      String?
+  creadoEn    DateTime @default(now())
+
+  @@index([productoId])
+}
+
+// ------------------------------------------------------------
+// CARRITO
+// ------------------------------------------------------------
+
+model Carrito {
+  id          String        @id @default(cuid())
+  usuarioId   String        @unique
+  usuario     Usuario       @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  items       ItemCarrito[]
+  actualizadoEn DateTime    @updatedAt
+}
+
+model ItemCarrito {
+  id          String   @id @default(cuid())
+  carritoId   String
+  carrito     Carrito  @relation(fields: [carritoId], references: [id], onDelete: Cascade)
+  productoId  String
+  producto    Producto @relation(fields: [productoId], references: [id])
+  cantidad    Int      @default(1)
+
+  @@unique([carritoId, productoId])
+}
+
+// ------------------------------------------------------------
+// PEDIDOS Y PAGOS
+// ------------------------------------------------------------
+
+model Pedido {
+  id            String        @id @default(cuid())
+  numero        String        @unique // ej. NEX-2026-000124
+  usuarioId     String
+  usuario       Usuario       @relation(fields: [usuarioId], references: [id])
+  direccionId   String?
+  direccion     Direccion?    @relation(fields: [direccionId], references: [id])
+
+  tipoEntrega   TipoEntrega   @default(ENVIO)
+  estado        EstadoPedido  @default(PENDIENTE)
+
+  subtotal      Decimal       @db.Decimal(10, 2)
+  costoEnvio    Decimal       @default(0) @db.Decimal(10, 2)
+  descuento     Decimal       @default(0) @db.Decimal(10, 2)
+  total         Decimal       @db.Decimal(10, 2)
+
+  cuponId       String?
+  cupon         Cupon?        @relation(fields: [cuponId], references: [id])
+
+  items         ItemPedido[]
+  pago          Pago?
+  historial     HistorialPedido[]
+
+  creadoEn      DateTime      @default(now())
+  actualizadoEn DateTime      @updatedAt
+
+  @@index([usuarioId])
+  @@index([estado])
+}
+
+model ItemPedido {
+  id            String   @id @default(cuid())
+  pedidoId      String
+  pedido        Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  productoId    String
+  producto      Producto @relation(fields: [productoId], references: [id])
+  nombreProducto String  // snapshot al momento de compra
+  precioUnitario Decimal @db.Decimal(10, 2)
+  cantidad      Int
+  subtotal      Decimal  @db.Decimal(10, 2)
+
+  @@index([pedidoId])
+}
+
+model HistorialPedido {
+  id          String       @id @default(cuid())
+  pedidoId    String
+  pedido      Pedido       @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  estado      EstadoPedido
+  nota        String?
+  creadoEn    DateTime     @default(now())
+
+  @@index([pedidoId])
+}
+
+model Pago {
+  id              String      @id @default(cuid())
+  pedidoId        String      @unique
+  pedido          Pedido      @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  metodo          MetodoPago
+  estado          EstadoPago  @default(PENDIENTE)
+  monto           Decimal     @db.Decimal(10, 2)
+  referenciaExterna String?   // ID de transacción de la pasarela (Culqi/Mercado Pago)
+  qrCodigo        String?     // payload del QR si aplica
+  qrExpiraEn      DateTime?
+  confirmadoEn    DateTime?
+  creadoEn        DateTime    @default(now())
+
+  @@index([estado])
+}
+
+// ------------------------------------------------------------
+// PROMOCIONES Y CUPONES
+// ------------------------------------------------------------
+
+model Cupon {
+  id            String        @id @default(cuid())
+  codigo        String        @unique
+  tipo          TipoPromocion
+  valor         Decimal       @db.Decimal(10, 2) // % o monto fijo según tipo
+  montoMinimo   Decimal?      @db.Decimal(10, 2)
+  usosMaximos   Int?
+  usosActuales  Int           @default(0)
+  activo        Boolean       @default(true)
+  validoDesde   DateTime      @default(now())
+  validoHasta   DateTime?
+
+  pedidos       Pedido[]
+  usuarios      CuponUsuario[]
+}
+
+model CuponUsuario {
+  id        String   @id @default(cuid())
+  cuponId   String
+  cupon     Cupon    @relation(fields: [cuponId], references: [id], onDelete: Cascade)
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usadoEn   DateTime @default(now())
+
+  @@unique([cuponId, usuarioId])
+}
