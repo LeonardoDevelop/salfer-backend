@@ -27,8 +27,15 @@ npm run prisma:seed
 npm run dev
 ```
 
-El servidor corre por defecto en `http://localhost:4000`.
-Verifica que está vivo en: `GET http://localhost:4000/health`
+El servidor corre por defecto en http://localhost:4000. Verifica que está vivo en: GET http://localhost:4000/health
+
+Nota para Windows / PowerShell
+
+Si npm o npx dan un error de "no se puede cargar el archivo .ps1 porque no está firmado digitalmente", usa la versión .cmd de cada comando:
+npm.cmd install
+npx.cmd prisma migrate dev --name init
+npm.cmd run prisma:seed
+npm.cmd run dev
 
 ## Endpoints implementados (Fase 1)
 
@@ -38,8 +45,9 @@ Verifica que está vivo en: `GET http://localhost:4000/health`
 | POST   | /api/auth/login     | Inicia sesión, devuelve JWT     |
 
 Usuario admin sembrado por el seed:
-- email: `admin@salfer.com`
-- password: `CambiarEstaClave123!` (cámbiala apenas tengas acceso)
+
+email: admin@salfer.com
+password: CambiarEstaClave123! (cámbiala apenas tengas acceso)
 
 ## Estructura del proyecto
 
