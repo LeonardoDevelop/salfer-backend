@@ -6,6 +6,7 @@ import direccionesRoutes from "./direcciones.routes";
 import carritoRoutes from "./carrito.routes";
 import pedidosRoutes from "./pedidos.routes";
 import pagosRoutes from "./pagos.routes";
+import adminRoutes from "./admin.routes";
 
 const router = Router();
 
@@ -16,8 +17,6 @@ router.use("/direcciones", direccionesRoutes);
 router.use("/carrito", carritoRoutes);
 router.use("/pedidos", pedidosRoutes);
 router.use("/pagos", pagosRoutes);
-
-// Próximas fases se agregan aquí:
-// router.use("/admin", adminRoutes); // dashboard, reportes
+router.use("/admin", adminRoutes);
 
 export default router;
